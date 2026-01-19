@@ -3,8 +3,6 @@ const CLIENT_SECRET = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET;
 
 // Use different URLs for local dev vs production
 const isProduction = import.meta.env.PROD;
-const TOKEN_URL = isProduction ? '/api/token' : '/auth/api/token';
-const API_BASE = isProduction ? '/api/spotify' : '/spotify';
 
 let accessToken = null;
 let tokenExpiry = null;
@@ -20,13 +18,13 @@ export async function getAccessToken() {
   
   if (isProduction) {
     // In production, the serverless function handles credentials
-    response = await fetch(TOKEN_URL, {
+    response = await fetch('/api/token', {
       method: 'POST',
     });
   } else {
     // In development, send credentials through proxy
     const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
-    response = await fetch(TOKEN_URL, {
+    response = await fetch('/auth/api/token', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
@@ -49,10 +47,10 @@ export async function getAccessToken() {
 }
 
 // Make authenticated API request
-async function apiRequest(endpoint) {
+async function apiRequest(url) {
   const token = await getAccessToken();
   
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const response = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
@@ -69,42 +67,57 @@ async function apiRequest(endpoint) {
 export async function searchArtists(query) {
   if (!query.trim()) return [];
   
-  const data = await apiRequest(
-    `/search?q=${encodeURIComponent(query)}&type=artist&limit=20`
-  );
-  
-  return data.artists.items;
+  if (isProduction) {
+    const data = await apiRequest(`/api/search?q=${encodeURIComponent(query)}`);
+    return data.artists.items;
+  } else {
+    const data = await apiRequest(`/spotify/search?q=${encodeURIComponent(query)}&type=artist&limit=20`);
+    return data.artists.items;
+  }
 }
 
 // Get artist details
 export async function getArtist(artistId) {
-  return apiRequest(`/artists/${artistId}`);
+  if (isProduction) {
+    return apiRequest(`/api/artists?id=${artistId}`);
+  } else {
+    return apiRequest(`/spotify/artists/${artistId}`);
+  }
 }
 
 // Get artist's top tracks
 export async function getArtistTopTracks(artistId, market = 'US') {
-  const data = await apiRequest(
-    `/artists/${artistId}/top-tracks?market=${market}`
-  );
-  return data.tracks;
+  if (isProduction) {
+    const data = await apiRequest(`/api/top-tracks?id=${artistId}&market=${market}`);
+    return data.tracks;
+  } else {
+    const data = await apiRequest(`/spotify/artists/${artistId}/top-tracks?market=${market}`);
+    return data.tracks;
+  }
 }
 
 // Get artist's albums
 export async function getArtistAlbums(artistId, limit = 10) {
-  const data = await apiRequest(
-    `/artists/${artistId}/albums?include_groups=album,single&limit=${limit}`
-  );
-  return data.items;
+  if (isProduction) {
+    const data = await apiRequest(`/api/albums?id=${artistId}&limit=${limit}`);
+    return data.items;
+  } else {
+    const data = await apiRequest(`/spotify/artists/${artistId}/albums?include_groups=album,single&limit=${limit}`);
+    return data.items;
+  }
 }
 
 // Get multiple artists at once
 export async function getMultipleArtists(artistIds) {
   if (artistIds.length === 0) return [];
   
-  const data = await apiRequest(
-    `/artists?ids=${artistIds.join(',')}`
-  );
-  return data.artists;
+  if (isProduction) {
+    const data = await apiRequest(`/api/artists?ids=${artistIds.join(',')}`);
+    return data.artists;
+  } else {
+    const data = await apiRequest(`/spotify/artists?ids=${artistIds.join(',')}`);
+    return data.artists;
+  }
 }
 
 // Format play count with commas
